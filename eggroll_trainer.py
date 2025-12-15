@@ -1,21 +1,3 @@
-"""
-EGGROLL Complete Training Loop for Translation Model Finetuning
-
-This module provides a complete training pipeline implementing the EGGROLL
-algorithm from "Evolution Strategies at Hyperscale" (arXiv:2511.16652). 
-
-Based on: https://github.com/ESHyperscale/HyperscaleES/blob/main/llm_experiments/general_do_evolution_multi_gpu.py
-
-Training Flow:
-    Step 1: Initialization (load model, setup noiser)
-    Step 2: Generate low-rank perturbations
-    Step 3: Forward pass with perturbed models
-    Step 4: Compute rewards (BLEU scores)
-    Step 5: Estimate gradients using ES
-    Step 6: Update parameters
-    Step 7: Repeat until convergence
-"""
-
 import os
 import sys
 import csv
@@ -39,14 +21,14 @@ try:
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
-    warnings.warn("wandb not installed.  Tracking disabled.")
+    warnings.warn("wandb not installed. Tracking disabled.")
 
 try:
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    raise ImportError("transformers is required.  Install with: pip install transformers")
+    raise ImportError("transformers is required. Install with: pip install transformers")
 
 
 # ============================================================================
@@ -56,7 +38,7 @@ except ImportError:
 @dataclass
 class EggrollTrainerConfig:
     """
-    Complete configuration for EGGROLL training. 
+    Complete configuration for EGGROLL training.
     Mirrors Args from the original JAX implementation.
     """
     # Random seed
@@ -76,12 +58,7 @@ class EggrollTrainerConfig:
     load_model: bool = False
     
     # Generation settings
-    generation_length: int = 128
-    max_source_length: int = 128
     num_beams: int = 1
-    temperature: float = 1. 0
-    val_temperature: float = 1.0
-    do_sample: bool = False
     
     # EGGROLL core hyperparameters
     sigma: float = 1e-3              # Noise standard deviation (σ)
@@ -116,7 +93,7 @@ class EggrollTrainerConfig:
     fitness_shaping: str = "centered_rank"  # "none", "standardize", "centered_rank"
     
     # Device settings
-    device: str = "cuda" if torch.cuda. is_available() else "cpu"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
     
     # Logging settings
     track: bool = False
@@ -130,7 +107,7 @@ class EggrollTrainerConfig:
     
     @property
     def experiment_name(self) -> str:
-        return f"{self.wandb_name}_lr={self.lr_scale}_sigma={self.sigma:. 2e}_rank={self.rank}"
+        return f"{self.wandb_name}_lr={self.lr_scale}_sigma={self.sigma:.2e}_rank={self.rank}"
 
 
 # ============================================================================
@@ -145,13 +122,13 @@ class TrainingStats:
     # Fitness statistics
     avg_fitness: float = 0.0
     std_fitness: float = 0.0
-    max_fitness: float = 0. 0
+    max_fitness: float = 0.0
     min_fitness: float = 0.0
     median_fitness: float = 0.0
     
     # Update statistics
     lora_param_diff: float = 0.0
-    full_param_diff: float = 0. 0
+    full_param_diff: float = 0.0
     gradient_norm: float = 0.0
     
     # Timing
@@ -219,7 +196,7 @@ class ESMapType:
 class OptimizerState:
     step: int = 0
     momentum: Optional[Dict[str, torch.Tensor]] = None
-    velocity: Optional[Dict[str, torch. Tensor]] = None
+    velocity: Optional[Dict[str, torch.Tensor]] = None
 
 
 # ============================================================================
@@ -236,13 +213,13 @@ class EggrollTrainer:
     
     def __init__(self, config: EggrollTrainerConfig):
         """
-        Initialize the EGGROLL trainer. 
+        Initialize the EGGROLL trainer.
         
         Args:
             config: Training configuration
         """
         self.config = config
-        self. device = config.device
+        self.device = config.device
         
         # Set random seeds
         self._set_seeds(config.seed)
@@ -251,15 +228,15 @@ class EggrollTrainer:
         self.model = None
         self.tokenizer = None
         self.params = None
-        self. es_map = None
+        self.es_map = None
         self.base_evo_keys = None
         self.opt_state = None
         self.reward_function = None
         
         # Training state
-        self. current_epoch = 0
-        self.true_train_fitness_sum = 0. 0
-        self. best_validation_score = -float('inf')
+        self.current_epoch = 0
+        self.true_train_fitness_sum = 0.0
+        self.best_validation_score = -float('inf')
         
         # Timing
         self.start_time = None
@@ -280,7 +257,7 @@ class EggrollTrainer:
     
     def setup(self):
         """
-        Setup the trainer (Step 1: Initialization). 
+        Setup the trainer (Step 1: Initialization).
         
         This includes:
         - Loading the pre-trained model
@@ -293,36 +270,36 @@ class EggrollTrainer:
         print("EGGROLL Trainer Setup")
         print("=" * 70)
         
-        # 1.  Load model and tokenizer
+        # 1. Load model and tokenizer
         print("\n[1/6] Loading model and tokenizer...")
         self._load_model()
         
-        # 2.  Extract parameters and build ES map
+        # 2. Extract parameters and build ES map
         print("\n[2/6] Building ES parameter map...")
         self._build_es_map()
         
-        # 3.  Initialize random keys
+        # 3. Initialize random keys
         print("\n[3/6] Initializing random keys...")
         self._init_random_keys()
         
-        # 4. Initialize optimizer state
+        # 4.Initialize optimizer state
         print("\n[4/6] Initializing optimizer...")
         self._init_optimizer()
         
-        # 5. Setup reward function
+        # 5.Setup reward function
         print("\n[5/6] Setting up reward function...")
         self._setup_reward_function()
         
-        # 6.  Initialize wandb
+        # 6. Initialize wandb
         if self.config.track:
             print("\n[6/6] Initializing wandb...")
             self._init_wandb()
         else:
             print("\n[6/6] Wandb tracking disabled.")
             
-        # 7. Load checkpoint if specified
-        if self. config.load_model and self.config.load_path:
-            print(f"\nLoading checkpoint from: {self.config. load_path}")
+        # 7.Load checkpoint if specified
+        if self.config.load_model and self.config.load_path:
+            print(f"\nLoading checkpoint from: {self.config.load_path}")
             self._load_checkpoint(self.config.load_path)
             
         self._print_setup_summary()
@@ -330,16 +307,16 @@ class EggrollTrainer:
     def _load_model(self):
         """Load pre-trained model and tokenizer."""
         dtype_map = {
-            "float32": torch. float32,
+            "float32": torch.float32,
             "float16": torch.float16,
-            "bfloat16": torch. bfloat16,
+            "bfloat16": torch.bfloat16,
         }
         torch_dtype = dtype_map.get(self.config.dtype, torch.float32)
         
         self.model = AutoModelForSeq2SeqLM.from_pretrained(
-            self.config. model_name,
+            self.config.model_name,
             torch_dtype=torch_dtype,
-        ). to(self.device)
+        ).to(self.device)
         
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
         
@@ -359,8 +336,7 @@ class EggrollTrainer:
         """Build ES parameter classification map."""
         lora_targets = [
             "q_proj", "k_proj", "v_proj", "out_proj",
-            "fc1", "fc2", "self_attn", "encoder_attn",
-            "k_proj", "v_proj", "q_proj",  # For some model architectures
+            "fc1", "fc2",
         ]
         
         self.es_map = {}
@@ -368,9 +344,9 @@ class EggrollTrainer:
         full_count = 0
         frozen_count = 0
         
-        for name, param in self. params.items():
+        for name, param in self.params.items():
             # Freeze embeddings and layer norms
-            if "embed" in name. lower():
+            if "embed" in name.lower():
                 self.es_map[name] = ESMapType.FROZEN
                 frozen_count += 1
             elif "layer_norm" in name.lower() or "layernorm" in name.lower():
@@ -379,18 +355,18 @@ class EggrollTrainer:
             # Biases get full updates (if not frozen)
             elif "bias" in name.lower():
                 if self.config.freeze_nonlora:
-                    self.es_map[name] = ESMapType. FROZEN
+                    self.es_map[name] = ESMapType.FROZEN
                     frozen_count += 1
                 else:
-                    self.es_map[name] = ESMapType. FULL
+                    self.es_map[name] = ESMapType.FULL
                     full_count += 1
             # Check for LoRA targets (2D weight matrices)
-            elif any(target in name. lower() for target in lora_targets) and len(param.shape) == 2:
-                self.es_map[name] = ESMapType. LORA
+            elif any(target in name.lower() for target in lora_targets) and len(param.shape) == 2:
+                self.es_map[name] = ESMapType.LORA
                 lora_count += 1
             else:
                 if self.config.freeze_nonlora:
-                    self. es_map[name] = ESMapType.FROZEN
+                    self.es_map[name] = ESMapType.FROZEN
                     frozen_count += 1
                 else:
                     self.es_map[name] = ESMapType.FULL
@@ -402,41 +378,41 @@ class EggrollTrainer:
         
     def _init_random_keys(self):
         """Initialize random keys for each parameter."""
-        master_key = RandomKeyGenerator(self. config.seed)
-        self.base_model_key = master_key. fold_in(0)
-        self. base_gen_key = master_key.fold_in(1)
+        master_key = RandomKeyGenerator(self.config.seed)
+        self.base_model_key = master_key.fold_in(0)
+        self.base_gen_key = master_key.fold_in(1)
         self.base_valid_key = master_key.fold_in(2)
         
         self.base_evo_keys = {
             name: self.base_model_key.fold_in(i)
-            for i, name in enumerate(self. params.keys())
+            for i, name in enumerate(self.params.keys())
         }
         
     def _init_optimizer(self):
         """Initialize optimizer state."""
-        self. opt_state = OptimizerState(step=0)
+        self.opt_state = OptimizerState(step=0)
         
         if self.config.optimizer_type == "adam":
-            self. opt_state.momentum = {
-                name: torch.zeros_like(p)
-                for name, p in self.params.items()
-                if self.es_map. get(name, ESMapType.FROZEN) != ESMapType. FROZEN
-            }
-            self.opt_state. velocity = {
-                name: torch.zeros_like(p)
-                for name, p in self.params.items()
-                if self.es_map.get(name, ESMapType. FROZEN) != ESMapType.FROZEN
-            }
-        elif self.config. momentum > 0:
             self.opt_state.momentum = {
                 name: torch.zeros_like(p)
                 for name, p in self.params.items()
-                if self. es_map.get(name, ESMapType.FROZEN) != ESMapType. FROZEN
+                if self.es_map.get(name, ESMapType.FROZEN) != ESMapType.FROZEN
+            }
+            self.opt_state.velocity = {
+                name: torch.zeros_like(p)
+                for name, p in self.params.items()
+                if self.es_map.get(name, ESMapType.FROZEN) != ESMapType.FROZEN
+            }
+        elif self.config.momentum > 0:
+            self.opt_state.momentum = {
+                name: torch.zeros_like(p)
+                for name, p in self.params.items()
+                if self.es_map.get(name, ESMapType.FROZEN) != ESMapType.FROZEN
             }
             
     def _setup_reward_function(self):
         """Setup reward function for evaluation."""
-        metric = self.config.reward_metric. lower()
+        metric = self.config.reward_metric.lower()
         
         if metric == "bleu":
             try:
@@ -448,12 +424,13 @@ class EggrollTrainer:
                 self.reward_function = self._compute_bleu_nltk
                 print(f"  Reward: BLEU (nltk)")
         elif metric == "length":
-            self. reward_function = self._compute_length_ratio
+            self.reward_function = self._compute_length_ratio
             print(f"  Reward: Length Ratio")
         else:
-            self. reward_function = self._compute_bleu_nltk
+            self.reward_function = self._compute_bleu_nltk
             print(f"  Reward: BLEU (nltk, fallback)")
-            
+
+
     def _init_wandb(self):
         """Initialize wandb tracking."""
         if not WANDB_AVAILABLE:
@@ -465,7 +442,7 @@ class EggrollTrainer:
             
         self.wandb_run = wandb.init(
             project=self.config.wandb_project,
-            name=self. config.experiment_name,
+            name=self.config.experiment_name,
             config=asdict(self.config),
         )
         print(f"  wandb run: {self.wandb_run.name}")
@@ -477,20 +454,20 @@ class EggrollTrainer:
         print("=" * 70)
         print(f"""
 Configuration:
-  Model: {self. config.model_name}
+  Model: {self.config.model_name}
   Device: {self.device}
   
 EGGROLL Hyperparameters:
   σ (sigma): {self.config.sigma}
-  α (learning rate): {self. config.lr_scale}
+  α (learning rate): {self.config.lr_scale}
   r (rank): {self.config.rank}
   N (population per prompt): {self.config.generations_per_prompt}
   
 Training:
-  Epochs: {self.config. num_epochs}
+  Epochs: {self.config.num_epochs}
   Prompts per epoch: {self.config.prompts_per_epoch}
   Total generations per epoch: {self.config.total_generations_per_epoch}
-  Reward metric: {self. config.reward_metric}
+  Reward metric: {self.config.reward_metric}
 """)
 
     # ========================================================================
@@ -509,13 +486,13 @@ Training:
         self,
         param_shape: Tuple[int, int],
         seed: int,
-    ) -> Tuple[torch. Tensor, torch. Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generate low-rank perturbation matrices A and B."""
         out_features, in_features = param_shape
-        rank = self.config. rank
-        sigma = self.config. sigma
+        rank = self.config.rank
+        sigma = self.config.sigma
         
-        gen_A = torch.Generator(). manual_seed(seed)
+        gen_A = torch.Generator().manual_seed(seed)
         gen_B = torch.Generator().manual_seed(seed + 1)
         
         # Scale by σ/√r
@@ -524,18 +501,17 @@ Training:
         A = torch.randn(out_features, rank, generator=gen_A) * scale
         B = torch.randn(in_features, rank, generator=gen_B)
         
-        return A. to(self.device), B.to(self.device)
+        return A.to(self.device), B.to(self.device)
     
     @torch.no_grad()
     def _generate_with_perturbation(
         self,
-        input_ids: torch. Tensor,
-        attention_mask: torch.Tensor,
+        input_ids: torch.Tensor,
         epoch: int,
         member_idx: int,
     ) -> torch.Tensor:
         """
-        Generate translation with perturbed model (Steps 2 & 3). 
+        Generate translation with perturbed model (Steps 2 & 3).
         
         Applies perturbation by directly modifying weights temporarily.
         """
@@ -544,31 +520,27 @@ Training:
         
         # Apply perturbations
         for name, param in self.model.named_parameters():
-            map_type = self. es_map.get(name, ESMapType.FROZEN)
+            map_type = self.es_map.get(name, ESMapType.FROZEN)
             
-            if map_type == ESMapType. FROZEN:
+            if map_type == ESMapType.FROZEN:
                 continue
                 
             original_weights[name] = param.data.clone()
-            base_seed = self. base_evo_keys[name].seed
+            base_seed = self.base_evo_keys[name].seed
             seed = self._get_perturbation_seed(base_seed, epoch, member_idx)
             
-            if map_type == ESMapType. LORA and len(param.shape) == 2:
+            if map_type == ESMapType.LORA and len(param.shape) == 2:
                 A, B = self._generate_lora_perturbation(param.shape, seed)
-                param.data = param.data + A @ B. T
+                param.data = param.data + A @ B.T
             elif map_type == ESMapType.FULL:
                 gen = torch.Generator().manual_seed(seed)
                 noise = torch.randn_like(param, generator=gen) * self.config.sigma
-                param.data = param.data + noise. to(self.device)
+                param.data = param.data + noise.to(self.device)
         
         # Generate
         output_ids = self.model.generate(
             input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_length=self.config.generation_length,
             num_beams=self.config.num_beams,
-            do_sample=self. config.do_sample,
-            temperature=self.config.temperature if self.config. do_sample else 1.0,
         )
         
         # Restore original weights
@@ -584,10 +556,10 @@ Training:
     
     def _compute_bleu(self, hypothesis: str, reference: str) -> float:
         """Compute BLEU score using sacrebleu."""
-        if not hypothesis. strip() or not reference.strip():
+        if not hypothesis.strip() or not reference.strip():
             return 0.0
         try:
-            bleu = self._sacrebleu. sentence_bleu(hypothesis, [reference], smooth_method='exp')
+            bleu = self._sacrebleu.sentence_bleu(hypothesis, [reference], smooth_method='exp')
             return bleu.score / 100.0
         except:
             return 0.0
@@ -597,13 +569,13 @@ Training:
         if not hypothesis.strip() or not reference.strip():
             return 0.0
         try:
-            from nltk.translate. bleu_score import sentence_bleu, SmoothingFunction
+            from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
             hyp_tokens = hypothesis.lower().split()
             ref_tokens = reference.lower().split()
             if len(hyp_tokens) == 0:
                 return 0.0
             return sentence_bleu([ref_tokens], hyp_tokens, 
-                               smoothing_function=SmoothingFunction(). method1)
+                               smoothing_function=SmoothingFunction().method1)
         except:
             return 0.0
     
@@ -611,7 +583,7 @@ Training:
         """Compute length ratio reward."""
         if not reference.strip():
             return 0.0
-        hyp_len = len(hypothesis. split())
+        hyp_len = len(hypothesis.split())
         ref_len = len(reference.split())
         if ref_len == 0:
             return 0.0
@@ -625,7 +597,7 @@ Training:
     ) -> np.ndarray:
         """Compute rewards for all hypotheses."""
         rewards = np.array([
-            self. reward_function(hyp, ref)
+            self.reward_function(hyp, ref)
             for hyp, ref in zip(hypotheses, references)
         ])
         return rewards
@@ -638,7 +610,7 @@ Training:
         """
         Apply fitness shaping for ES stability.
         
-        Mirrors NOISER. convert_fitnesses from original code.
+        Mirrors NOISER.convert_fitnesses from original code.
         """
         if self.config.fitness_shaping == "none":
             return raw_scores
@@ -651,21 +623,21 @@ Training:
         elif self.config.fitness_shaping == "centered_rank":
             n = len(raw_scores)
             ranks = np.argsort(np.argsort(raw_scores))
-            shaped = (ranks. astype(np.float32) + 0.5) / n - 0.5
+            shaped = (ranks.astype(np.float32) + 0.5) / n - 0.5
             return shaped
             
         else:
             # Group-wise normalization (for multiple prompts)
             group_size = self.config.generations_per_prompt
             if group_size > 0 and len(raw_scores) > group_size:
-                group_scores = raw_scores. reshape(-1, group_size)
+                group_scores = raw_scores.reshape(-1, group_size)
                 group_mean = np.mean(group_scores, axis=-1, keepdims=True)
                 global_std = np.std(raw_scores) + 1e-8
                 shaped = (group_scores - group_mean) / global_std
-                return shaped. ravel()
+                return shaped.ravel()
             else:
                 mean = np.mean(raw_scores)
-                std = np. std(raw_scores) + 1e-8
+                std = np.std(raw_scores) + 1e-8
                 return (raw_scores - mean) / std
     
     # ========================================================================
@@ -680,7 +652,7 @@ Training:
         """
         Estimate gradients and update parameters (Steps 5 & 6).
         
-        Mirrors _do_update from original code. 
+        Mirrors _do_update from original code.
         """
         population_size = len(shaped_fitnesses)
         stats = {}
@@ -692,8 +664,8 @@ Training:
         full_count = 0
         total_grad_norm_sq = 0.0
         
-        for name, param in self. params.items():
-            map_type = self. es_map.get(name, ESMapType.FROZEN)
+        for name, param in self.params.items():
+            map_type = self.es_map.get(name, ESMapType.FROZEN)
             
             if map_type == ESMapType.FROZEN:
                 new_params[name] = param
@@ -704,16 +676,16 @@ Training:
             
             for member_idx in range(population_size):
                 R_i = shaped_fitnesses[member_idx]
-                base_seed = self. base_evo_keys[name].seed
+                base_seed = self.base_evo_keys[name].seed
                 seed = self._get_perturbation_seed(base_seed, epoch, member_idx)
                 
-                if map_type == ESMapType.LORA and len(param. shape) == 2:
+                if map_type == ESMapType.LORA and len(param.shape) == 2:
                     A, B = self._generate_lora_perturbation(param.shape, seed)
                     gradient += R_i * (A @ B.T)
                 elif map_type == ESMapType.FULL:
                     gen = torch.Generator().manual_seed(seed)
                     noise = torch.randn_like(param, generator=gen) * self.config.sigma
-                    gradient += R_i * noise. to(self.device) / self.config.sigma
+                    gradient += R_i * noise.to(self.device) / self.config.sigma
                     
             gradient /= population_size
             
@@ -725,7 +697,7 @@ Training:
             new_params[name] = new_param
             
             # Compute difference
-            diff = torch.sqrt(torch.mean((new_param - param) ** 2)). item()
+            diff = torch.sqrt(torch.mean((new_param - param) ** 2)).item()
             
             if map_type == ESMapType.LORA:
                 lora_diff_sum += diff
@@ -734,10 +706,10 @@ Training:
                 full_diff_sum += diff
                 full_count += 1
                 
-            total_grad_norm_sq += torch.norm(gradient). item() ** 2
+            total_grad_norm_sq += torch.norm(gradient).item() ** 2
         
         # Update stored parameters
-        self. params = new_params
+        self.params = new_params
         
         # Update model weights
         self._update_model_weights()
@@ -751,35 +723,35 @@ Training:
     def _apply_optimizer_step(
         self,
         name: str,
-        gradient: torch. Tensor,
-    ) -> torch. Tensor:
+        gradient: torch.Tensor,
+    ) -> torch.Tensor:
         """Apply optimizer step to gradient."""
-        lr = self.config. lr_scale
+        lr = self.config.lr_scale
         
         if self.config.optimizer_type == "adam":
             t = self.opt_state.step + 1
-            beta1 = self. config.adam_beta1
+            beta1 = self.config.adam_beta1
             beta2 = self.config.adam_beta2
-            eps = self.config. adam_eps
+            eps = self.config.adam_eps
             
-            m = self.opt_state. momentum. get(name, torch.zeros_like(gradient))
-            v = self.opt_state.velocity.get(name, torch. zeros_like(gradient))
+            m = self.opt_state.momentum.get(name, torch.zeros_like(gradient))
+            v = self.opt_state.velocity.get(name, torch.zeros_like(gradient))
             
             m = beta1 * m + (1 - beta1) * gradient
             v = beta2 * v + (1 - beta2) * (gradient ** 2)
             
-            self.opt_state. momentum[name] = m
-            self. opt_state.velocity[name] = v
+            self.opt_state.momentum[name] = m
+            self.opt_state.velocity[name] = v
             
             m_hat = m / (1 - beta1 ** t)
             v_hat = v / (1 - beta2 ** t)
             
             return lr * m_hat / (torch.sqrt(v_hat) + eps)
             
-        elif self. config.momentum > 0:
-            m = self.opt_state.momentum.get(name, torch. zeros_like(gradient))
+        elif self.config.momentum > 0:
+            m = self.opt_state.momentum.get(name, torch.zeros_like(gradient))
             m = self.config.momentum * m + gradient
-            self.opt_state. momentum[name] = m
+            self.opt_state.momentum[name] = m
             return lr * m
             
         else:
@@ -792,7 +764,7 @@ Training:
             if name in state_dict:
                 state_dict[name] = param
         self.model.load_state_dict(state_dict)
-    
+
     # ========================================================================
     # Single Epoch
     # ========================================================================
@@ -801,6 +773,7 @@ Training:
         self,
         train_data: List[Tuple[str, str]],
         epoch: int,
+        val_data: Optional[List[Tuple[str, str]]] = None,
     ) -> TrainingStats:
         """
         Execute a single training epoch.
@@ -811,9 +784,9 @@ Training:
         epoch_start = time.time()
         
         # Validation (periodic)
-        if epoch % self.config. validate_every == 0:
+        if epoch % self.config.validate_every == 0 and val_data:
             val_start = time.time()
-            stats.validation_score = self._validate(epoch)
+            stats.validation_score = self._validate(val_data)
             stats.validation_time = time.time() - val_start
             
             if stats.validation_score > self.best_validation_score:
@@ -831,19 +804,16 @@ Training:
         
         for source, reference in epoch_samples:
             # Tokenize
-            inputs = self. tokenizer(
+            inputs = self.tokenizer(
                 source,
                 return_tensors="pt",
                 padding=True,
-                truncation=True,
-                max_length=self.config.max_source_length,
-            ).to(self. device)
+            ).to(self.device)
             
             # Generate for each population member
             for member_idx in range(self.config.generations_per_prompt):
                 output_ids = self._generate_with_perturbation(
                     inputs["input_ids"],
-                    inputs. get("attention_mask"),
                     epoch,
                     member_idx,
                 )
@@ -852,7 +822,7 @@ Training:
                 all_hypotheses.append(hypothesis)
                 all_references.append(reference)
                 
-        stats.generation_time = time. time() - gen_start
+        stats.generation_time = time.time() - gen_start
         
         # Compute rewards (Step 4)
         fitness_start = time.time()
@@ -862,15 +832,15 @@ Training:
         raw_rewards = raw_rewards.reshape(
             self.config.prompts_per_epoch,
             self.config.generations_per_prompt
-        ). sum(axis=0)
+        ).sum(axis=0)
         
-        stats.fitness_time = time. time() - fitness_start
+        stats.fitness_time = time.time() - fitness_start
         
         # Statistics
         stats.avg_fitness = float(np.mean(raw_rewards))
         stats.std_fitness = float(np.std(raw_rewards))
         stats.max_fitness = float(np.max(raw_rewards))
-        stats.min_fitness = float(np. min(raw_rewards))
+        stats.min_fitness = float(np.min(raw_rewards))
         stats.median_fitness = float(np.median(raw_rewards))
         
         # Shape fitnesses (Step 5a)
@@ -879,14 +849,14 @@ Training:
         # Estimate gradients and update (Steps 5b & 6)
         update_start = time.time()
         update_stats = self._estimate_and_update(shaped_fitnesses, epoch)
-        stats. update_time = time.time() - update_start
+        stats.update_time = time.time() - update_start
         
         stats.lora_param_diff = update_stats['lora_param_diff']
         stats.full_param_diff = update_stats['full_param_diff']
         stats.gradient_norm = update_stats['gradient_norm']
         
         # Increment optimizer step
-        self.opt_state. step += 1
+        self.opt_state.step += 1
         
         # Update running average
         self.true_train_fitness_sum += np.sum(raw_rewards)
@@ -896,12 +866,12 @@ Training:
         )
         
         # Save checkpoint (periodic)
-        if self.config.save_model and epoch % self. config.save_every == 0:
+        if self.config.save_model and epoch % self.config.save_every == 0:
             save_start = time.time()
             self._save_checkpoint(epoch, stats)
-            stats.saving_time = time. time() - save_start
+            stats.saving_time = time.time() - save_start
             
-        stats.total_time = time. time() - epoch_start
+        stats.total_time = time.time() - epoch_start
         
         return stats
     
@@ -915,7 +885,7 @@ Training:
         rng = np.random.RandomState(self.config.seed + epoch)
         indices = rng.choice(
             len(train_data),
-            size=min(self.config. prompts_per_epoch, len(train_data)),
+            size=min(self.config.prompts_per_epoch, len(train_data)),
             replace=False,
         )
         return [train_data[i] for i in indices]
@@ -925,43 +895,40 @@ Training:
     # ========================================================================
     
     @torch.no_grad()
-    def _validate(self, epoch: int) -> float:
-        """Run validation without perturbation (σ=0)."""
-        # This would use validation data
-        # For now, return placeholder
-        return 0.0
+    # def _validate(self, epoch: int) -> float:
+    #     """Run validation without perturbation (σ=0)."""
+    #     # This would use validation data
+    #     # For now, return placeholder
+    #     return 0.0
     
-    def validate(
+    def _validate(
         self,
         val_data: List[Tuple[str, str]],
     ) -> float:
         """
         Run validation on provided data.
         
-        Uses base model without perturbation. 
+        Uses base model without perturbation.
         """
         total_reward = 0.0
         count = 0
-        
+
         for source, reference in tqdm(val_data, desc="Validating"):
             inputs = self.tokenizer(
                 source,
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
-                max_length=self. config.max_source_length,
-            ).to(self. device)
+            ).to(self.device)
             
             with torch.no_grad():
-                output_ids = self. model.generate(
+                output_ids = self.model.generate(
                     input_ids=inputs["input_ids"],
-                    attention_mask=inputs.get("attention_mask"),
-                    max_length=self.config.generation_length,
-                    num_beams=self. config.num_beams,
+                    num_beams=self.config.num_beams,
                 )
                 
             hypothesis = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
-            reward = self. reward_function(hypothesis, reference)
+            reward = self.reward_function(hypothesis, reference)
             
             total_reward += reward
             count += 1
@@ -974,31 +941,37 @@ Training:
     
     def _save_checkpoint(self, epoch: int, stats: TrainingStats):
         """Save training checkpoint."""
-        ckpt_dir = Path(self.config. save_path)
+        ckpt_dir = Path(self.config.save_path)
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         
         checkpoint = {
             'epoch': epoch,
-            'params': {k: v.cpu() for k, v in self.params. items()},
+            'params': {k: v.cpu() for k, v in self.params.items()},
             'opt_state': {
-                'step': self.opt_state. step,
-                'momentum': {k: v.cpu() for k, v in (self.opt_state.momentum or {}). items()},
-                'velocity': {k: v.cpu() for k, v in (self.opt_state. velocity or {}).items()},
+                'step': self.opt_state.step,
+                'momentum': {k: v.cpu() for k, v in (self.opt_state.momentum or {}).items()},
+                'velocity': {k: v.cpu() for k, v in (self.opt_state.velocity or {}).items()},
             },
-            'es_map': self. es_map,
+            'es_map': self.es_map,
             'config': asdict(self.config),
             'stats': asdict(stats),
             'true_train_fitness_sum': self.true_train_fitness_sum,
             'best_validation_score': self.best_validation_score,
-            'timestamp': datetime.now(). isoformat(),
+            'timestamp': datetime.now().isoformat(),
         }
         
         ckpt_path = ckpt_dir / f"checkpoint_epoch_{epoch:05d}.pt"
-        torch. save(checkpoint, ckpt_path)
+        torch.save(checkpoint, ckpt_path)
         
         # Also save as latest
-        latest_path = ckpt_dir / "latest. pt"
+        latest_path = ckpt_dir / "latest.pt"
         torch.save(checkpoint, latest_path)
+
+        self.model.save_pretrained(f"{ckpt_dir}/checkpoint_epoch_{epoch:05d}")
+        self.tokenizer.save_pretrained(f"{ckpt_dir}/checkpoint_epoch_{epoch:05d}")
+
+        self.model.save_pretrained(f"{ckpt_dir}/checkpoint_last")
+        self.tokenizer.save_pretrained(f"{ckpt_dir}/checkpoint_last")
         
         print(f"  Checkpoint saved: {ckpt_path}")
         
@@ -1007,64 +980,63 @@ Training:
         checkpoint = torch.load(path, map_location=self.device)
         
         self.params = {
-            k: v. to(self.device)
+            k: v.to(self.device)
             for k, v in checkpoint['params'].items()
         }
         
-        self.opt_state. step = checkpoint['opt_state']['step']
+        self.opt_state.step = checkpoint['opt_state']['step']
         if checkpoint['opt_state']['momentum']:
-            self.opt_state. momentum = {
+            self.opt_state.momentum = {
                 k: v.to(self.device)
-                for k, v in checkpoint['opt_state']['momentum']. items()
+                for k, v in checkpoint['opt_state']['momentum'].items()
             }
         if checkpoint['opt_state']['velocity']:
             self.opt_state.velocity = {
-                k: v. to(self.device)
+                k: v.to(self.device)
                 for k, v in checkpoint['opt_state']['velocity'].items()
             }
             
         self.current_epoch = checkpoint['epoch'] + 1
-        self.true_train_fitness_sum = checkpoint. get('true_train_fitness_sum', 0. 0)
+        self.true_train_fitness_sum = checkpoint.get('true_train_fitness_sum', 0.0)
         self.best_validation_score = checkpoint.get('best_validation_score', -float('inf'))
         
         self._update_model_weights()
         
         print(f"  Loaded checkpoint from epoch {checkpoint['epoch']}")
-    
-    # ========================================================================
+     # ========================================================================
     # Logging
     # ========================================================================
     
     def _log_epoch(self, stats: TrainingStats):
         """Log epoch statistics."""
         # Console logging
-        if stats.epoch % self.config. log_every == 0:
+        if stats.epoch % self.config.log_every == 0:
             print(f"\nEpoch {stats.epoch:5d} | "
-                  f"Fitness: {stats.avg_fitness:.4f} ± {stats.std_fitness:. 4f} | "
+                  f"Fitness: {stats.avg_fitness:.4f} ± {stats.std_fitness:.4f} | "
                   f"Best: {stats.max_fitness:.4f} | "
                   f"Grad: {stats.gradient_norm:.6f} | "
                   f"Time: {stats.total_time:.2f}s")
             
             if stats.validation_score is not None:
-                print(f"           | Validation: {stats.validation_score:. 4f} "
+                print(f"           | Validation: {stats.validation_score:.4f} "
                       f"(Best: {self.best_validation_score:.4f})")
         
         # Wandb logging
         if self.wandb_run is not None:
             log_dict = {
                 'epoch': stats.epoch,
-                'avg_fitness': stats. avg_fitness,
+                'avg_fitness': stats.avg_fitness,
                 'std_fitness': stats.std_fitness,
                 'max_fitness': stats.max_fitness,
-                'min_fitness': stats. min_fitness,
+                'min_fitness': stats.min_fitness,
                 'median_fitness': stats.median_fitness,
                 'lora_param_diff': stats.lora_param_diff,
                 'full_param_diff': stats.full_param_diff,
                 'gradient_norm': stats.gradient_norm,
-                'generation_time': stats. generation_time,
-                'update_time': stats. update_time,
-                'total_time': stats. total_time,
-                'true_train_avg_fitness': stats. true_train_avg_fitness,
+                'generation_time': stats.generation_time,
+                'update_time': stats.update_time,
+                'total_time': stats.total_time,
+                'true_train_avg_fitness': stats.true_train_avg_fitness,
             }
             
             if stats.validation_score is not None:
@@ -1083,7 +1055,7 @@ Training:
         val_data: Optional[List[Tuple[str, str]]] = None,
     ):
         """
-        Main training loop. 
+        Main training loop.
         
         Args:
             train_data: List of (source, target) pairs
@@ -1093,15 +1065,18 @@ Training:
         print("Starting EGGROLL Training")
         print("=" * 70)
         
-        self.start_time = time. time()
+        self.start_time = time.time()
         
         try:
-            for epoch in tqdm(range(self.current_epoch, self. config.num_epochs),
+            for epoch in tqdm(range(self.current_epoch, self.config.num_epochs),
                             desc="Training", initial=self.current_epoch,
                             total=self.config.num_epochs):
                 
                 # Run single epoch
-                stats = self._single_epoch(train_data, epoch)
+                if val_data:
+                    stats = self._single_epoch(train_data, epoch, val_data)
+                else:
+                    stats = self._single_epoch(train_data, epoch)
                 
                 # Log
                 self._log_epoch(stats)
@@ -1122,9 +1097,9 @@ Training:
             if self.wandb_run is not None:
                 self.wandb_run.finish()
                 
-        total_time = time. time() - self. start_time
+        total_time = time.time() - self.start_time
         print(f"\nTraining completed in {total_time/3600:.2f} hours")
-        print(f"Best validation score: {self.best_validation_score:. 4f}")
+        print(f"Best validation score: {self.best_validation_score:.4f}")
 
 
 # ============================================================================
@@ -1137,7 +1112,7 @@ def main():
     # Example configuration
     config = EggrollTrainerConfig(
         # Model
-        model_name="Helsinki-NLP/opus-mt-en-vi",
+        model_name="/home/jovyan/nmt-srv-shared/users/binh/grpo_training/transflow/0_Base/en-vi-2.1.10.04-grpo-100k",
         
         # EGGROLL hyperparameters
         sigma=1e-3,
@@ -1145,13 +1120,13 @@ def main():
         rank=16,
         
         # Population
-        generations_per_prompt=8,
-        prompts_per_epoch=8,
+        generations_per_prompt=64,
+        prompts_per_epoch=32,
         
         # Training
         num_epochs=100,
-        validate_every=10,
-        save_every=50,
+        validate_every=20,
+        save_every=10,
         
         # Optimizer
         optimizer_type="sgd",
@@ -1161,25 +1136,38 @@ def main():
         fitness_shaping="centered_rank",
         
         # Paths
-        output_directory="./outputs",
-        save_path="./checkpoints",
+        output_directory="/home/jovyan/nmt-srv-shared/users/binh/EGGROLL/outputs",
+        save_path="/home/jovyan/nmt-srv-shared/users/binh/EGGROLL/checkpoints",
         
         # Device
-        device="cuda" if torch.cuda. is_available() else "cpu",
+        device="cuda" if torch.cuda.is_available() else "cpu",
     )
     
     # Example training data (source, target pairs)
-    train_data = [
-        ("Hello, how are you?", "Xin chào, bạn khỏe không?"),
-        ("The weather is nice today.", "Thời tiết hôm nay đẹp. "),
-        ("I love learning new languages.", "Tôi thích học ngôn ngữ mới."),
-        ("Machine translation is fascinating.", "Dịch máy thật thú vị."),
-        ("Thank you very much.", "Cảm ơn bạn rất nhiều."),
-        ("See you tomorrow.", "Hẹn gặp lại ngày mai."),
-        ("What time is it?", "Bây giờ là mấy giờ?"),
-        ("I am a student.", "Tôi là sinh viên."),
-        # Add more training pairs... 
-    ]
+    src_train = open("/home/jovyan/nmt-srv-shared/users/binh/eggroll_training/dataset/train.src", "r", encoding='utf-8').readlines()
+    tgt_train = open("/home/jovyan/nmt-srv-shared/users/binh/eggroll_training/dataset/train.tgt", "r", encoding='utf-8').readlines()
+
+    src_valid = open("/home/jovyan/nmt-srv-shared/users/binh/eggroll_training/dataset/valid.src", "r", encoding='utf-8').readlines()
+    tgt_valid = open("/home/jovyan/nmt-srv-shared/users/binh/eggroll_training/dataset/valid.tgt", "r", encoding='utf-8').readlines()
+
+    train_data = []
+    valid_data = []
+    for src, tgt in tqdm(zip(src_train, tgt_train), desc="Loading train dataset"):
+        train_data.append((src.strip(), tgt.strip()))
+    for src, tgt in tqdm(zip(src_valid, tgt_valid), desc="Loading valid dataset"):
+        valid_data.append((src.strip(), tgt.strip()))
+
+    # train_data = [
+    #     ("Hello, how are you?", "Xin chào, bạn khỏe không?"),
+    #     ("The weather is nice today.", "Thời tiết hôm nay đẹp."),
+    #     ("I love learning new languages.", "Tôi thích học ngôn ngữ mới."),
+    #     ("Machine translation is fascinating.", "Dịch máy thật thú vị."),
+    #     ("Thank you very much.", "Cảm ơn bạn rất nhiều."),
+    #     ("See you tomorrow.", "Hẹn gặp lại ngày mai."),
+    #     ("What time is it?", "Bây giờ là mấy giờ?"),
+    #     ("I am a student.", "Tôi là sinh viên."),
+    #     # Add more training pairs...
+    # ]
     
     # Create trainer
     trainer = EggrollTrainer(config)
@@ -1188,7 +1176,7 @@ def main():
     trainer.setup()
     
     # Train
-    trainer. train(train_data)
+    trainer.train(train_data, valid_data)
 
 
 if __name__ == "__main__":
